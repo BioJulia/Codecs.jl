@@ -38,11 +38,6 @@ function encode(::Base64, input::Vector{Uint8})
     m = int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
-    println((n, length(output)))
-
-    # Fuck. We have to partition, not zip here. We need to add some things to
-    # Iterators to do this correctly (elegantly).
-
     for (i, (u, v, w)) in enumerate(partition(input, 3))
         output[4 * (i - 1) + 1] =
             base64_tbl[1 + u >> 2]
@@ -62,7 +57,7 @@ function encode(::Base64, input::Vector{Uint8})
     elseif n % 3 == 2
         output[end - 3] = base64_tbl[1 + input[end - 1] >> 2]
         output[end - 2] =
-            base64_tbl[1 + ((input[end - 1] << 4) | (input[end - 1] >> 4)) & 0b00111111]
+            base64_tbl[1 + ((input[end - 1] << 4) | (input[end] >> 4)) & 0b00111111]
         output[end - 1] =
             base64_tbl[1 + (input[end] << 2) & 0b00111111]
         output[end] = base64_pad
