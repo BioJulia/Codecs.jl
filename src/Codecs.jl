@@ -13,6 +13,11 @@ function encode{T <: Codec}(codec::Type{T}, s::String)
 end
 
 
+function decode{T <: Codec}(codec::Type{T}, s::String)
+    decode(codec, convert(Vector{Uint8}, s))
+end
+
+
 # RFC3548/RFC4648 base64 codec
 
 abstract Base64 <: Codec
@@ -282,7 +287,9 @@ function decode(::Type{Zlib}, input::Vector{Uint8})
         ret = ccall((:inflate, :libz),
                     Int32, (Ptr{z_stream}, Int32),
                     &strm, Z_NO_FLUSH)
-        if ret != Z_OK && ret != Z_STREAM_END
+        if ret == Z_DATA_ERROR
+            error("Error: input is not zlib compressed data.")
+        elseif ret != Z_OK && ret != Z_STREAM_END
             error("Error in zlib inflate stream ($(ret)).")
         end
 
