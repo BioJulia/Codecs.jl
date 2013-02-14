@@ -17,20 +17,46 @@ end
 
 abstract Base64 <: Codec
 
-const base64_tbl = Uint8[
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-    'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-    'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-    'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-    'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-    'w', 'x', 'y', 'z', '0', '1', '2', '3',
-    '4', '5', '6', '7', '8', '9', '+', '/']
+let
+    const base64_tbl = Uint8[
+        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+        'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+        'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+        'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+        'w', 'x', 'y', 'z', '0', '1', '2', '3',
+        '4', '5', '6', '7', '8', '9', '+', '/']
+    global base64enc
+
+    # Encode a single base64 symbol.
+    base64enc(c::Uint8) = base64_tbl[1 + c]
+end
 
 const base64_pad = uint8('=')
 
 
-function encode(::Base64, input::Vector{Uint8})
+# Decode a single base64 symbol.
+function base64dec(c::Uint8)
+    if 'A' <= c <= 'Z'
+        c - uint8('A')
+    elseif 'a' <= c <= 'z'
+        c - uint8('a') + 26
+    elseif '0' <= c <= '9'
+        c - uint8('0') + 52
+    elseif c == '+'
+        62
+    elseif c == '/'
+        63
+    elseif c == base64_pad
+        error("Premature padding in base64 data.")
+    else
+        error("Invalid base64 symbol: $(char(c))")
+    end
+end
+
+
+function encode(::Type{Base64}, input::Vector{Uint8})
     n = length(input)
     if n == 0
         return Array(Uint8, 0)
@@ -40,35 +66,73 @@ function encode(::Base64, input::Vector{Uint8})
     output = Array(Uint8, m)
 
     for (i, (u, v, w)) in enumerate(partition(input, 3))
-        output[4 * (i - 1) + 1] =
-            base64_tbl[1 + u >> 2]
-        output[4 * (i - 1) + 2] =
-            base64_tbl[1 + ((u << 4) | (v >> 4)) & 0b00111111]
-        output[4 * (i - 1) + 3] =
-            base64_tbl[1 + ((v << 2) | (w >> 6)) & 0b00111111]
-        output[4 * (i - 1) + 4] =
-            base64_tbl[1 + w & 0b00111111]
+        k = 4 * (i - 1)
+        output[k + 1] = base64enc(u >> 2)
+        output[k + 2] = base64enc(((u << 4) | (v >> 4)) & 0b00111111)
+        output[k + 3] = base64enc(((v << 2) | (w >> 6)) & 0b00111111)
+        output[k + 4] = base64enc(w & 0b00111111)
     end
 
     if n % 3 == 1
-        output[end - 3] = base64_tbl[1 + input[end] >> 2]
-        output[end - 2] = base64_tbl[1 + (input[end] << 4) & 0b00111111]
+        output[end - 3] = base64enc(input[end] >> 2)
+        output[end - 2] = base64enc((input[end] << 4) & 0b00111111)
         output[end - 1] = base64_pad
         output[end - 0] = base64_pad
     elseif n % 3 == 2
-        output[end - 3] = base64_tbl[1 + input[end - 1] >> 2]
-        output[end - 2] =
-            base64_tbl[1 + ((input[end - 1] << 4) | (input[end] >> 4)) & 0b00111111]
-        output[end - 1] =
-            base64_tbl[1 + (input[end] << 2) & 0b00111111]
+        output[end - 3] = base64enc(input[end - 1] >> 2)
+        output[end - 2] = base64enc(((input[end - 1] << 4) |
+                                     (input[end] >> 4)) & 0b00111111)
+        output[end - 1] = base64enc((input[end] << 2) & 0b00111111)
         output[end] = base64_pad
     end
 
     output
 end
 
-# TODO: decode
 
+function decode(::Type{Base64}, input::Vector{Uint8})
+    n = length(input)
+    if n % 4 != 0
+        warn("Length of Base64 input is not a multiple of four.")
+    end
+
+    m = 3 * div(n,  4)
+    if input[end] == base64_pad
+        m -= 1
+    end
+    if input[end - 1] == base64_pad
+        m -= 1
+    end
+    output = Array(Uint8, m)
+
+    for (i, (u, v, w, z)) in enumerate(partition(map(base64dec, input[1:end-4]), 4))
+        k = 3 * (i - 1)
+        output[k + 1] = (u << 2) | (v >> 4)
+        output[k + 2] = (v << 4) | (w >> 2)
+        output[k + 3] = (w << 6) | z
+    end
+
+    (u, v, w, z) = input[(end-3):end]
+    u = base64dec(u)
+    v = base64dec(v)
+
+
+    if w == base64_pad && z == base64_pad
+        output[end] = (u << 2) | (v >> 4)
+    elseif z == base64_pad
+        w = base64dec(w)
+        output[end - 1] = (u << 2) | (v >> 4)
+        output[end]     = (v << 4) | (w >> 2)
+    else
+        w = base64dec(w)
+        z = base64dec(z)
+        output[end - 2] = (u << 2) | (v >> 4)
+        output[end - 1] = (v << 4) | (w >> 2)
+        output[end]     = (w << 6) | z
+    end
+
+    output
+end
 
 
 # Zlib/Gzip
