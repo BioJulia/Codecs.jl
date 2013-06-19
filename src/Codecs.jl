@@ -97,6 +97,10 @@ end
 
 function decode(::Type{Base64}, input::Vector{Uint8})
     n = length(input)
+    if n == 0
+        return Array(Uint8, 0)
+    end
+
     if n % 4 != 0
         warn("Length of Base64 input is not a multiple of four.")
     end
