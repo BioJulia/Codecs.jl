@@ -3,7 +3,7 @@ module Codecs
 
 import Iterators.partition
 
-export encode, decode, Base64, Zlib
+export encode, decode, Base64, Zlib, BCD
 
 abstract Codec
 
@@ -308,6 +308,43 @@ function decode(::Type{Zlib}, input::Vector{Uint8})
     end
 
     output
+end
+
+
+# Packed binary-coded decimal (BCD) integers
+# Two decimal digits per byte, each represented with 4 bits
+
+abstract BCD <: Codec
+
+function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
+    if i < 0
+        error("Integer must not be negative")
+    end
+    ndig = ndigits(i)
+    ndig += isodd(ndig)
+    v = digits(i, 10, ndig)
+    nbytes = itrunc(ndig/2)
+    out = Array(Uint8, nbytes)
+    dj = 1-2*bigendian
+    for i = 1:nbytes
+        j = bigendian*length(v) + dj*2*(i-1) + 1-bigendian
+        out[i] = (v[j]<<4) | v[j+dj]
+    end
+    return out
+end
+
+function decode(::Type{BCD}, v::Vector{Uint8}, bigendian::Bool = false)
+    ret = 0
+    if bigendian
+        for i = 1:length(v)
+            ret = 100*ret + 10*int(v[i]>>>4) + int(v[i]&0x0f)
+        end
+    else
+        for i = length(v):-1:1
+            ret = 100*ret + int(v[i]>>>4) + 10*int(v[i]&0x0f)
+        end
+    end
+    return ret
 end
 
 
