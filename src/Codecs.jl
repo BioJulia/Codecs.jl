@@ -167,15 +167,19 @@ const Z_BUF_ERROR     = -5
 const Z_VERSION_ERROR = -6
 
 
+@unix_only const libz = "libz"
+@windows_only const libz = "zlib1"
+
+
 # The zlib z_stream structure.
 type z_stream
     next_in::Ptr{Uint8}
-    avail_in::Uint32
-    total_in::Uint
+    avail_in::Cuint
+    total_in::Culong
 
     next_out::Ptr{Uint8}
-    avail_out::Uint32
-    total_out::Uint
+    avail_out::Cuint
+    total_out::Culong
 
     msg::Ptr{Uint8}
     state::Ptr{Void}
@@ -184,9 +188,9 @@ type z_stream
     zfree::Ptr{Void}
     opaque::Ptr{Void}
 
-    data_type::Int32
-    adler::Uint
-    reserved::Uint
+    data_type::Cint
+    adler::Culong
+    reserved::Culong
 
     function z_stream()
         strm = new()
@@ -210,7 +214,7 @@ end
 
 
 function zlib_version()
-    ccall((:zlibVersion, :libz), Ptr{Uint8}, ())
+    ccall((:zlibVersion, libz), Ptr{Uint8}, ())
 end
 
 
@@ -220,7 +224,7 @@ function encode(::Type{Zlib}, input::Vector{Uint8}, level::Integer)
     end
 
     strm = z_stream()
-    ret = ccall((:deflateInit_, :libz),
+    ret = ccall((:deflateInit_, libz),
                 Int32, (Ptr{z_stream}, Int32, Ptr{Uint8}, Int32),
                 &strm, level, zlib_version(), sizeof(z_stream))
 
@@ -239,7 +243,7 @@ function encode(::Type{Zlib}, input::Vector{Uint8}, level::Integer)
         strm.avail_out = length(outbuf)
         strm.next_out = outbuf
         flush = strm.avail_in == 0 ? Z_FINISH : Z_NO_FLUSH
-        ret = ccall((:deflate, :libz),
+        ret = ccall((:deflate, libz),
                     Int32, (Ptr{z_stream}, Int32),
                     &strm, flush)
         if ret != Z_OK && ret != Z_STREAM_END
@@ -251,7 +255,7 @@ function encode(::Type{Zlib}, input::Vector{Uint8}, level::Integer)
         end
     end
 
-    ret = ccall((:deflateEnd, :libz), Int32, (Ptr{z_stream},), &strm)
+    ret = ccall((:deflateEnd, libz), Int32, (Ptr{z_stream},), &strm)
     if ret == Z_STREAM_ERROR
         error("Error: zlib deflate stream was prematurely freed.")
     end
@@ -270,7 +274,7 @@ encode(::Type{Zlib}, input::Vector{Uint8}) = encode(Zlib, input, 9)
 
 function decode(::Type{Zlib}, input::Vector{Uint8})
     strm = z_stream()
-    ret = ccall((:inflateInit_, :libz),
+    ret = ccall((:inflateInit_, libz),
                 Int32, (Ptr{z_stream}, Ptr{Uint8}, Int32),
                 &strm, zlib_version(), sizeof(z_stream))
 
@@ -288,7 +292,7 @@ function decode(::Type{Zlib}, input::Vector{Uint8})
     while ret != Z_STREAM_END
         strm.next_out = outbuf
         strm.avail_out = length(outbuf)
-        ret = ccall((:inflate, :libz),
+        ret = ccall((:inflate, libz),
                     Int32, (Ptr{z_stream}, Int32),
                     &strm, Z_NO_FLUSH)
         if ret == Z_DATA_ERROR
@@ -302,7 +306,7 @@ function decode(::Type{Zlib}, input::Vector{Uint8})
         end
     end
 
-    ret = ccall((:inflateEnd, :libz), Int32, (Ptr{z_stream},), &strm)
+    ret = ccall((:inflateEnd, libz), Int32, (Ptr{z_stream},), &strm)
     if ret == Z_STREAM_ERROR
         error("Error: zlib inflate stream was prematurely freed.")
     end
