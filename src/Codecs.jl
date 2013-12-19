@@ -1,7 +1,7 @@
 
 module Codecs
 
-import Iterators.partition
+import Iterators: partition
 
 export encode, decode, Base64, Zlib, BCD
 
