@@ -40,7 +40,7 @@ const base64_pad = uint8('=')
 
 
 # Decode a single base64 symbol.
-function base64dec(c::Uint8)
+function _base64dec(c::Uint8)
     if 'A' <= c <= 'Z'
         c - uint8('A')
     elseif 'a' <= c <= 'z'
@@ -58,6 +58,22 @@ function base64dec(c::Uint8)
     end
 end
 
+const base64lookup = fill(typemax(Uint), 256)
+for c = 0x00:0xff
+    try
+        v = _base64dec(c)
+        base64lookup[c+1] = v
+    catch
+    end
+end
+
+function base64dec(c::Uint8)
+    @inbounds v = base64lookup[c+1]
+    if v == typemax(Uint)
+        error("Invalid base64 symbol: $(char(c))")
+    end
+    v
+end
 
 function encode(::Type{Base64}, input::Vector{Uint8})
     n = length(input)
