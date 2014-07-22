@@ -50,9 +50,9 @@ function base64dec(c::Uint8)
     elseif '0' <= c <= '9'
         c - uint8('0') + 52
     elseif c == '+'
-        62
+        uint(62)
     elseif c == '/'
-        63
+        uint(63)
     elseif c == base64_pad
         error("Premature padding in base64 data.")
     else
