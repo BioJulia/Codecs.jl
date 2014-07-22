@@ -1,8 +1,6 @@
 
 module Codecs
 
-import Iterators.partition
-
 export encode, decode, Base64, Zlib, BCD
 
 abstract Codec
@@ -70,7 +68,10 @@ function encode(::Type{Base64}, input::Vector{Uint8})
     m = int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
-    for (i, (u, v, w)) in enumerate(partition(input, 3))
+    i = 0
+    for ii = 1:3:length(input)-2
+        i += 1
+        u, v, w = input[ii], input[ii+1], input[ii+2]
         k = 4 * (i - 1)
         output[k + 1] = base64enc(u >> 2)
         output[k + 2] = base64enc(((u << 4) | (v >> 4)) & 0b00111111)
@@ -114,7 +115,13 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     end
     output = Array(Uint8, m)
 
-    for (i, (u, v, w, z)) in enumerate(partition(map(base64dec, input[1:end-4]), 4))
+    i = 0
+    for ii = 1:4:length(input)-4
+        i += 1
+        u = base64dec(input[ii])
+        v = base64dec(input[ii+1])
+        w = base64dec(input[ii+2])
+        z = base64dec(input[ii+3])
         k = 3 * (i - 1)
         output[k + 1] = (u << 2) | (v >> 4)
         output[k + 2] = (v << 4) | (w >> 2)
