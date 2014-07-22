@@ -1,8 +1,6 @@
 
 module Codecs
 
-import Iterators: partition
-
 export encode, decode, Base64, Zlib, BCD
 
 abstract Codec
@@ -42,7 +40,7 @@ const base64_pad = uint8('=')
 
 
 # Decode a single base64 symbol.
-function base64dec(c::Uint8)
+function _base64dec(c::Uint8)
     if 'A' <= c <= 'Z'
         c - uint8('A')
     elseif 'a' <= c <= 'z'
@@ -50,9 +48,9 @@ function base64dec(c::Uint8)
     elseif '0' <= c <= '9'
         c - uint8('0') + 52
     elseif c == '+'
-        62
+        uint(62)
     elseif c == '/'
-        63
+        uint(63)
     elseif c == base64_pad
         error("Premature padding in base64 data.")
     else
@@ -60,6 +58,22 @@ function base64dec(c::Uint8)
     end
 end
 
+const base64lookup = fill(typemax(Uint), 256)
+for c = 0x00:0xff
+    try
+        v = _base64dec(c)
+        base64lookup[c+1] = v
+    catch
+    end
+end
+
+function base64dec(c::Uint8)
+    @inbounds v = base64lookup[c+1]
+    if v == typemax(Uint)
+        error("Invalid base64 symbol: $(char(c))")
+    end
+    v
+end
 
 function encode(::Type{Base64}, input::Vector{Uint8})
     n = length(input)
@@ -70,7 +84,10 @@ function encode(::Type{Base64}, input::Vector{Uint8})
     m = int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
-    for (i, (u, v, w)) in enumerate(partition(input, 3))
+    i = 0
+    for ii = 1:3:length(input)-2
+        i += 1
+        u, v, w = input[ii], input[ii+1], input[ii+2]
         k = 4 * (i - 1)
         output[k + 1] = base64enc(u >> 2)
         output[k + 2] = base64enc(((u << 4) | (v >> 4)) & 0b00111111)
@@ -114,7 +131,13 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     end
     output = Array(Uint8, m)
 
-    for (i, (u, v, w, z)) in enumerate(partition(map(base64dec, input[1:end-4]), 4))
+    i = 0
+    for ii = 1:4:length(input)-4
+        i += 1
+        u = base64dec(input[ii])
+        v = base64dec(input[ii+1])
+        w = base64dec(input[ii+2])
+        z = base64dec(input[ii+3])
         k = 3 * (i - 1)
         output[k + 1] = (u << 2) | (v >> 4)
         output[k + 2] = (v << 4) | (w >> 2)
