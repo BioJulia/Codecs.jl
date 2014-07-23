@@ -58,7 +58,8 @@ function _base64dec(c::Uint8)
     end
 end
 
-const base64lookup = fill(typemax(Uint), 256)
+const sentinel = typemax(Uint)
+const base64lookup = fill(sentinel, 256)
 for c = 0x00:0xff
     try
         v = _base64dec(c)
@@ -131,20 +132,34 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     end
     output = Array(Uint8, m)
 
-    i = 0
-    for ii = 1:4:length(input)-4
-        i += 1
-        u = base64dec(input[ii])
-        v = base64dec(input[ii+1])
-        w = base64dec(input[ii+2])
-        z = base64dec(input[ii+3])
-        k = 3 * (i - 1)
+    k = 0
+    @inbounds for ii = 1:4:length(input)-4
+        # This loop is performance-critical, so inline base64dec and consolidate into a single branch point for error-checking
+        u = base64lookup[input[ii]+1]
+        v = base64lookup[input[ii+1]+1]
+        w = base64lookup[input[ii+2]+1]
+        z = base64lookup[input[ii+3]+1]
+        if u | v | w | z == sentinel
+            if u == sentinel
+                error("Invalid base64 symbol: $(char(u))")
+            elseif v == sentinel
+                error("Invalid base64 symbol: $(char(v))")
+            elseif w == sentinel
+                error("Invalid base64 symbol: $(char(w))")
+            else
+                error("Invalid base64 symbol: $(char(z))")
+            end
+        end
         output[k + 1] = (u << 2) | (v >> 4)
         output[k + 2] = (v << 4) | (w >> 2)
         output[k + 3] = (w << 6) | z
+        k += 3
     end
 
-    (u, v, w, z) = input[(end-3):end]
+    u = input[end-3]
+    v = input[end-2]
+    w = input[end-1]
+    z = input[end]
     u = base64dec(u)
     v = base64dec(v)
 
