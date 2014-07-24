@@ -60,7 +60,8 @@ end
 
 const sentinel = typemax(Uint)
 const base64lookup = fill(sentinel, 256)
-for c = 0x00:0xff
+for ci = 0:255
+    c = uint8(ci)    # Julia 0.2.1 doesn't like `for c = 0x00:0xff`
     try
         v = _base64dec(c)
         base64lookup[c+1] = v
