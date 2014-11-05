@@ -58,20 +58,20 @@ function _base64dec(c::Uint8)
     end
 end
 
-const sentinel = typemax(Uint)
+const sentinel = typemax(Uint8)
 const base64lookup = fill(sentinel, 256)
 for ci = 0:255
     c = uint8(ci)    # Julia 0.2.1 doesn't like `for c = 0x00:0xff`
     try
         v = _base64dec(c)
-        base64lookup[c+1] = v
+        base64lookup[c] = v
     catch
     end
 end
 
 function base64dec(c::Uint8)
-    @inbounds v = base64lookup[c+1]
-    if v == typemax(Uint)
+    @inbounds v = base64lookup[c]
+    if v == sentinel
         error("Invalid base64 symbol: $(char(c))")
     end
     v
@@ -86,28 +86,27 @@ function encode(::Type{Base64}, input::Vector{Uint8})
     m = int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
-    i = 0
+    k = 0
     for ii = 1:3:length(input)-2
-        i += 1
         u, v, w = input[ii], input[ii+1], input[ii+2]
-        k = 4 * (i - 1)
         output[k + 1] = base64enc(u >> 2)
         output[k + 2] = base64enc(((u << 4) | (v >> 4)) & 0b00111111)
         output[k + 3] = base64enc(((v << 2) | (w >> 6)) & 0b00111111)
         output[k + 4] = base64enc(w & 0b00111111)
+        k += 4
     end
 
     if n % 3 == 1
         output[end - 3] = base64enc(input[end] >> 2)
         output[end - 2] = base64enc((input[end] << 4) & 0b00111111)
         output[end - 1] = base64_pad
-        output[end - 0] = base64_pad
+        output[end]     = base64_pad
     elseif n % 3 == 2
         output[end - 3] = base64enc(input[end - 1] >> 2)
         output[end - 2] = base64enc(((input[end - 1] << 4) |
                                      (input[end] >> 4)) & 0b00111111)
         output[end - 1] = base64enc((input[end] << 2) & 0b00111111)
-        output[end] = base64_pad
+        output[end]     = base64_pad
     end
 
     output
@@ -136,19 +135,19 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     k = 0
     @inbounds for ii = 1:4:length(input)-4
         # This loop is performance-critical, so inline base64dec and consolidate into a single branch point for error-checking
-        u = base64lookup[input[ii]+1]
-        v = base64lookup[input[ii+1]+1]
-        w = base64lookup[input[ii+2]+1]
-        z = base64lookup[input[ii+3]+1]
+        ue = input[ii];     u = base64lookup[ue]
+        ve = input[ii + 1]; v = base64lookup[ve]
+        we = input[ii + 2]; w = base64lookup[we]
+        ze = input[ii + 3]; z = base64lookup[ze]
         if u | v | w | z == sentinel
             if u == sentinel
-                error("Invalid base64 symbol: $(char(u))")
+                error("Invalid base64 symbol: $(char(ue))")
             elseif v == sentinel
-                error("Invalid base64 symbol: $(char(v))")
+                error("Invalid base64 symbol: $(char(ve))")
             elseif w == sentinel
-                error("Invalid base64 symbol: $(char(w))")
+                error("Invalid base64 symbol: $(char(we))")
             else
-                error("Invalid base64 symbol: $(char(z))")
+                error("Invalid base64 symbol: $(char(ze))")
             end
         end
         output[k + 1] = (u << 2) | (v >> 4)
