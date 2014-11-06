@@ -104,19 +104,19 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     k = 1
     @inbounds for ii = 1:4:length(input)-4
         # This loop is performance-critical, so inline base64dec and consolidate into a single branch point for error-checking
-        ue = input[ii];     u = b64dec_tbl[ue]
-        ve = input[ii + 1]; v = b64dec_tbl[ve]
-        we = input[ii + 2]; w = b64dec_tbl[we]
-        ze = input[ii + 3]; z = b64dec_tbl[ze]
+        u = b64dec_tbl[input[ii]]
+        v = b64dec_tbl[input[ii + 1]]
+        w = b64dec_tbl[input[ii + 2]]
+        z = b64dec_tbl[input[ii + 3]]
         if u | v | w | z == sentinel
             if u == sentinel
-                error("Invalid base64 symbol: $(char(ue))")
+                error("Invalid base64 symbol: $(char(input[ii]))")
             elseif v == sentinel
-                error("Invalid base64 symbol: $(char(ve))")
+                error("Invalid base64 symbol: $(char(input[ii + 1]))")
             elseif w == sentinel
-                error("Invalid base64 symbol: $(char(we))")
+                error("Invalid base64 symbol: $(char(input[ii + 2]))")
             else
-                error("Invalid base64 symbol: $(char(ze))")
+                error("Invalid base64 symbol: $(char(input[ii + 3]))")
             end
         end
         output[k]     = (u << 2) | (v >> 4)
@@ -149,7 +149,6 @@ function decode(::Type{Base64}, input::Vector{Uint8})
 
     output
 end
-
 
 # Zlib/Gzip
 
