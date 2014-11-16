@@ -20,58 +20,27 @@ end
 
 abstract Base64 <: Codec
 
-let
-    const base64_tbl = Uint8[
-        'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
-        'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
-        'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
-        'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
-        'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
-        'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-        'w', 'x', 'y', 'z', '0', '1', '2', '3',
-        '4', '5', '6', '7', '8', '9', '+', '/']
-    global base64enc
-
-    # Encode a single base64 symbol.
-    base64enc(c::Uint8) = base64_tbl[1 + c]
-end
+const b64enc_tbl = Uint8[
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+    'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+    'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X',
+    'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f',
+    'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n',
+    'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
+    'w', 'x', 'y', 'z', '0', '1', '2', '3',
+    '4', '5', '6', '7', '8', '9', '+', '/']
 
 const base64_pad = uint8('=')
+const sentinel = typemax(Uint8)
 
-
-# Decode a single base64 symbol.
-function _base64dec(c::Uint8)
-    if 'A' <= c <= 'Z'
-        c - uint8('A')
-    elseif 'a' <= c <= 'z'
-        c - uint8('a') + 26
-    elseif '0' <= c <= '9'
-        c - uint8('0') + 52
-    elseif c == '+'
-        uint(62)
-    elseif c == '/'
-        uint(63)
-    elseif c == base64_pad
-        error("Premature padding in base64 data.")
-    else
-        error("Invalid base64 symbol: $(char(c))")
-    end
-end
-
-const sentinel = typemax(Uint)
-const base64lookup = fill(sentinel, 256)
-for ci = 0:255
-    c = uint8(ci)    # Julia 0.2.1 doesn't like `for c = 0x00:0xff`
-    try
-        v = _base64dec(c)
-        base64lookup[c+1] = v
-    catch
-    end
+const b64dec_tbl = fill(sentinel, 256)
+for (val, ch) in enumerate(b64enc_tbl)
+    b64dec_tbl[ch] = val - 1
 end
 
 function base64dec(c::Uint8)
-    @inbounds v = base64lookup[c+1]
-    if v == typemax(Uint)
+    v = b64dec_tbl[c]
+    if v == sentinel
         error("Invalid base64 symbol: $(char(c))")
     end
     v
@@ -86,27 +55,26 @@ function encode(::Type{Base64}, input::Vector{Uint8})
     m = int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
-    i = 0
+    k = 1
     for ii = 1:3:length(input)-2
-        i += 1
         u, v, w = input[ii], input[ii+1], input[ii+2]
-        k = 4 * (i - 1)
-        output[k + 1] = base64enc(u >> 2)
-        output[k + 2] = base64enc(((u << 4) | (v >> 4)) & 0b00111111)
-        output[k + 3] = base64enc(((v << 2) | (w >> 6)) & 0b00111111)
-        output[k + 4] = base64enc(w & 0b00111111)
+        output[k]     = b64enc_tbl[  (u >> 2)                     + 1]
+        output[k + 1] = b64enc_tbl[(((u << 4) | (v >> 4)) & 0x3f) + 1]
+        output[k + 2] = b64enc_tbl[(((v << 2) | (w >> 6)) & 0x3f) + 1]
+        output[k + 3] = b64enc_tbl[  (w                   & 0x3f) + 1]
+        k += 4
     end
 
     if n % 3 == 1
-        output[end - 3] = base64enc(input[end] >> 2)
-        output[end - 2] = base64enc((input[end] << 4) & 0b00111111)
+        output[end - 3] = b64enc_tbl[ (input[end] >> 2)         + 1]
+        output[end - 2] = b64enc_tbl[((input[end] << 4) & 0x3f) + 1]
         output[end - 1] = base64_pad
-        output[end - 0] = base64_pad
+        output[end]     = base64_pad
     elseif n % 3 == 2
-        output[end - 3] = base64enc(input[end - 1] >> 2)
-        output[end - 2] = base64enc(((input[end - 1] << 4) |
-                                     (input[end] >> 4)) & 0b00111111)
-        output[end - 1] = base64enc((input[end] << 2) & 0b00111111)
+        output[end - 3] = b64enc_tbl[  (input[end - 1] >> 2)      + 1]
+        output[end - 2] = b64enc_tbl[(((input[end - 1] << 4) |
+                                       (input[end] >> 4)) & 0x3f) + 1]
+        output[end - 1] = b64enc_tbl[ ((input[end] << 2) & 0x3f)  + 1]
         output[end] = base64_pad
     end
 
@@ -133,27 +101,27 @@ function decode(::Type{Base64}, input::Vector{Uint8})
     end
     output = Array(Uint8, m)
 
-    k = 0
+    k = 1
     @inbounds for ii = 1:4:length(input)-4
         # This loop is performance-critical, so inline base64dec and consolidate into a single branch point for error-checking
-        u = base64lookup[input[ii]+1]
-        v = base64lookup[input[ii+1]+1]
-        w = base64lookup[input[ii+2]+1]
-        z = base64lookup[input[ii+3]+1]
+        u = b64dec_tbl[input[ii]]
+        v = b64dec_tbl[input[ii + 1]]
+        w = b64dec_tbl[input[ii + 2]]
+        z = b64dec_tbl[input[ii + 3]]
         if u | v | w | z == sentinel
             if u == sentinel
-                error("Invalid base64 symbol: $(char(u))")
+                error("Invalid base64 symbol: $(char(input[ii]))")
             elseif v == sentinel
-                error("Invalid base64 symbol: $(char(v))")
+                error("Invalid base64 symbol: $(char(input[ii + 1]))")
             elseif w == sentinel
-                error("Invalid base64 symbol: $(char(w))")
+                error("Invalid base64 symbol: $(char(input[ii + 2]))")
             else
-                error("Invalid base64 symbol: $(char(z))")
+                error("Invalid base64 symbol: $(char(input[ii + 3]))")
             end
         end
-        output[k + 1] = (u << 2) | (v >> 4)
-        output[k + 2] = (v << 4) | (w >> 2)
-        output[k + 3] = (w << 6) | z
+        output[k]     = (u << 2) | (v >> 4)
+        output[k + 1] = (v << 4) | (w >> 2)
+        output[k + 2] = (w << 6) | z
         k += 3
     end
 
@@ -181,7 +149,6 @@ function decode(::Type{Base64}, input::Vector{Uint8})
 
     output
 end
-
 
 # Zlib/Gzip
 
