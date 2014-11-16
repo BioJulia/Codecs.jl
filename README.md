@@ -1,3 +1,4 @@
+[![Build Status](https://travis-ci.org/dcjones/Codecs.jl.svg?branch=master)](https://travis-ci.org/dcjones/Codecs.jl)
 
 # Codecs
 
