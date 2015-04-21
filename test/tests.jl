@@ -1,5 +1,3 @@
-using Codecs
-using Base.Test
 
 n = [1,4,7,9,11,17,243,5247]
 

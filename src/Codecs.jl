@@ -1,6 +1,9 @@
 
 module Codecs
 
+using Compat
+
+
 export encode, decode, Base64, Zlib, BCD
 
 abstract Codec
@@ -30,7 +33,7 @@ const b64enc_tbl = Uint8[
     'w', 'x', 'y', 'z', '0', '1', '2', '3',
     '4', '5', '6', '7', '8', '9', '+', '/']
 
-const base64_pad = uint8('=')
+const base64_pad = @compat UInt8('=')
 const sentinel = typemax(Uint8)
 
 const b64dec_tbl = fill(sentinel, 256)
@@ -52,7 +55,7 @@ function encode(::Type{Base64}, input::Vector{Uint8})
         return Array(Uint8, 0)
     end
 
-    m = int(4 * ceil(n / 3))
+    m = @compat Int(4 * ceil(n / 3))
     output = Array(Uint8, m)
 
     k = 1
@@ -333,7 +336,7 @@ function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     ndig = ndigits(i)
     ndig += isodd(ndig)
     v = digits(i, 10, ndig)
-    nbytes = itrunc(ndig/2)
+    nbytes = @compat trunc(Integer, ndig/2)
     out = Array(Uint8, nbytes)
     dj = 1-2*bigendian
     for i = 1:nbytes
@@ -347,11 +350,11 @@ function decode(::Type{BCD}, v::Vector{Uint8}, bigendian::Bool = false)
     ret = 0
     if bigendian
         for i = 1:length(v)
-            ret = 100*ret + 10*int(v[i]>>>4) + int(v[i]&0x0f)
+            ret = 100*ret + 10 * (@compat Int(v[i]>>>4)) + (@compat Int(v[i]&0x0f))
         end
     else
         for i = length(v):-1:1
-            ret = 100*ret + int(v[i]>>>4) + 10*int(v[i]&0x0f)
+            ret = 100*ret + (@compat Int(v[i]>>>4)) + 10 * (@compat Int(v[i]&0x0f))
         end
     end
     return ret
