@@ -177,9 +177,11 @@ const Z_BUF_ERROR     = -5
 const Z_VERSION_ERROR = -6
 
 
-@unix_only const libz = "libz"
-@windows_only const libz = "zlib1"
-
+if is_unix()
+    const libz = "libz"
+elseif is_windows()
+    const libz = "zlib1"
+end
 
 # The zlib z_stream structure.
 type z_stream
