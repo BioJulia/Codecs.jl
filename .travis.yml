@@ -1,8 +1,15 @@
 language: julia
 os:
-   - linux
-julia:
-   - release
-   - nightly
+  - linux
+  - osx
 notifications:
   email: false
+julia:
+  - 0.3
+  - 0.4
+  - 0.5
+  - nightly
+before_install:
+  - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
+script:
+  - julia -e 'Pkg.init(); Pkg.clone(pwd()); Pkg.test("Codecs")'
