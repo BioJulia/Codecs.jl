@@ -1,4 +1,9 @@
-[![Build Status](https://travis-ci.org/dcjones/Codecs.jl.svg?branch=master)](https://travis-ci.org/dcjones/Codecs.jl)
+OSX/Linux: [![Build Status](https://travis-ci.org/dcjones/Codecs.jl.svg?branch=master)](https://travis-ci.org/dcjones/Codecs.jl) </br>
+pkg.julialang.org: [![Codecs](http://pkg.julialang.org/badges/Codecs_0.3.svg)](http://pkg.julialang.org/?pkg=Codecs) </br>
+[![Codecs](http://pkg.julialang.org/badges/Codecs_0.4.svg)](http://pkg.julialang.org/?pkg=Codecs)
+[![Codecs](http://pkg.julialang.org/badges/Codecs_0.5.svg)](http://pkg.julialang.org/?pkg=Codecs)
+Windows: [![Build status](https://ci.appveyor.com/api/projects/status/3fbti63h06xx024t/branch/master?svg=true)](https://ci.appveyor.com/project/randyzwitch/codecs-jl/branch/master)
+
 
 # Codecs
 
