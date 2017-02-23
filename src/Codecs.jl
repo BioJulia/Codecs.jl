@@ -7,7 +7,7 @@ using Compat
 
 export encode, decode, Base64, Zlib, BCD
 
-abstract Codec
+@compat abstract type Codec end
 
 
 function encode{T <: Codec}(codec::Type{T}, s::AbstractString)
@@ -22,7 +22,7 @@ end
 
 # RFC3548/RFC4648 base64 codec
 
-abstract Base64 <: Codec
+@compat abstract type Base64 <: Codec end
 
 const b64enc_tbl = UInt8[
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
@@ -53,11 +53,11 @@ end
 function encode(::Type{Base64}, input::Vector{UInt8})
     n = length(input)
     if n == 0
-        return Array(UInt8, 0)
+        return Vector{UInt8}(0)
     end
 
     m = @compat Int(4 * ceil(n / 3))
-    output = Array(UInt8, m)
+    output = Vector{UInt8}(m)
 
     k = 1
     for ii = 1:3:length(input)-2
@@ -89,7 +89,7 @@ end
 function decode(::Type{Base64}, input::Vector{UInt8})
     n = length(input)
     if n == 0
-        return Array(UInt8, 0)
+        return Vector{UInt8}(0)
     end
 
     if n % 4 != 0
@@ -103,7 +103,7 @@ function decode(::Type{Base64}, input::Vector{UInt8})
     if input[end - 1] == base64_pad
         m -= 1
     end
-    output = Array(UInt8, m)
+    output = Vector{UInt8}(m)
 
     k = 1
     @inbounds for ii = 1:4:length(input)-4
@@ -156,7 +156,7 @@ end
 
 # Zlib/Gzip
 
-abstract Zlib <: Codec
+@compat abstract type Zlib <: Codec end
 
 const Z_NO_FLUSH      = 0
 const Z_PARTIAL_FLUSH = 1
@@ -247,8 +247,8 @@ function encode(::Type{Zlib}, input::Vector{UInt8}, level::Integer)
     strm.next_in = input
     strm.avail_in = length(input)
     strm.total_in = length(input)
-    output = Array(UInt8, 0)
-    outbuf = Array(UInt8, 1024)
+    output = Vector{UInt8}(0)
+    outbuf = Vector{UInt8}(1024)
     ret = Z_OK
 
     while ret != Z_STREAM_END
@@ -297,8 +297,8 @@ function decode(::Type{Zlib}, input::Vector{UInt8})
     strm.next_in = input
     strm.avail_in = length(input)
     strm.total_in = length(input)
-    output = Array(UInt8, 0)
-    outbuf = Array(UInt8, 1024)
+    output = Vector{UInt8}(0)
+    outbuf = Vector{UInt8}(1024)
     ret = Z_OK
 
     while ret != Z_STREAM_END
@@ -330,7 +330,7 @@ end
 # Packed binary-coded decimal (BCD) integers
 # Two decimal digits per byte, each represented with 4 bits
 
-abstract BCD <: Codec
+@compat abstract type BCD <: Codec end
 
 function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     if i < 0
@@ -340,7 +340,7 @@ function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     ndig += isodd(ndig)
     v = digits(i, 10, ndig)
     nbytes = @compat trunc(Integer, ndig/2)
-    out = Array(UInt8, nbytes)
+    out = Vector{UInt8}(nbytes)
     dj = 1-2*bigendian
     for i = 1:nbytes
         j = bigendian*length(v) + dj*2*(i-1) + 1-bigendian
