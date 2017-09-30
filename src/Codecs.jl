@@ -1,4 +1,4 @@
-VERSION >= v"0.4.0-dev+6641" && __precompile__()
+__precompile__()
 
 module Codecs
 
@@ -11,14 +11,23 @@ export encode, decode, Base64, Zlib, BCD
 
 
 function encode{T <: Codec}(codec::Type{T}, s::AbstractString)
-    encode(codec, convert(Vector{UInt8}, s))
+    encode(codec, Vector{UInt8}(s))
 end
 
 
 function decode{T <: Codec}(codec::Type{T}, s::AbstractString)
-    decode(codec, convert(Vector{UInt8}, s))
+    decode(codec, Vector{UInt8}(s))
 end
 
+@static if isdefined(Base, Symbol("@gc_preserve"))
+    import Base: @gc_preserve
+else
+    # This is not the correct definition of `@gc_preserve` on 0.5 and 0.6.
+    # It should be no worse than the old code in this package though.
+    macro gc_preserve(args...)
+        esc(args[end])
+    end
+end
 
 # RFC3548/RFC4648 base64 codec
 
@@ -34,7 +43,7 @@ const b64enc_tbl = UInt8[
     'w', 'x', 'y', 'z', '0', '1', '2', '3',
     '4', '5', '6', '7', '8', '9', '+', '/']
 
-const base64_pad = @compat UInt8('=')
+const base64_pad = UInt8('=')
 const sentinel = typemax(UInt8)
 
 const b64dec_tbl = fill(sentinel, 256)
@@ -56,7 +65,7 @@ function encode(::Type{Base64}, input::Vector{UInt8})
         return Vector{UInt8}(0)
     end
 
-    m = @compat Int(4 * ceil(n / 3))
+    m = Int(4 * ceil(n / 3))
     output = Vector{UInt8}(m)
 
     k = 1
@@ -177,9 +186,9 @@ const Z_BUF_ERROR     = -5
 const Z_VERSION_ERROR = -6
 
 
-if is_unix()
+if Compat.Sys.isunix()
     const libz = "libz"
-elseif is_windows()
+elseif Compat.Sys.iswindows()
     const libz = "zlib1"
 end
 
@@ -226,7 +235,7 @@ end
 
 
 function zlib_version()
-    ccall((:zlibVersion, libz), Ptr{UInt8}, ())
+    unsafe_string(ccall((:zlibVersion, libz), Ptr{UInt8}, ()))
 end
 
 
@@ -237,27 +246,26 @@ function encode(::Type{Zlib}, input::Vector{UInt8}, level::Integer)
 
     strm = z_stream()
     ret = ccall((:deflateInit_, libz),
-                Int32, (Ptr{z_stream}, Int32, Ptr{UInt8}, Int32),
-                &strm, level, zlib_version(), sizeof(z_stream))
+                Int32, (Ref{z_stream}, Int32, Ptr{UInt8}, Int32),
+                strm, level, zlib_version(), sizeof(z_stream))
 
     if ret != Z_OK
         error("Error initializing zlib deflate stream.")
     end
 
-    strm.next_in = input
+    strm.next_in = pointer(input)
     strm.avail_in = length(input)
     strm.total_in = length(input)
     output = Vector{UInt8}(0)
     outbuf = Vector{UInt8}(1024)
-    ret = Z_OK
 
-    while ret != Z_STREAM_END
+    @gc_preserve input outbuf while ret != Z_STREAM_END
         strm.avail_out = length(outbuf)
-        strm.next_out = outbuf
+        strm.next_out = pointer(outbuf)
         flush = strm.avail_in == 0 ? Z_FINISH : Z_NO_FLUSH
         ret = ccall((:deflate, libz),
-                    Int32, (Ptr{z_stream}, Int32),
-                    &strm, flush)
+                    Int32, (Ref{z_stream}, Int32),
+                    strm, flush)
         if ret != Z_OK && ret != Z_STREAM_END
             error("Error in zlib deflate stream ($(ret)).")
         end
@@ -267,7 +275,7 @@ function encode(::Type{Zlib}, input::Vector{UInt8}, level::Integer)
         end
     end
 
-    ret = ccall((:deflateEnd, libz), Int32, (Ptr{z_stream},), &strm)
+    ret = ccall((:deflateEnd, libz), Int32, (Ref{z_stream},), strm)
     if ret == Z_STREAM_ERROR
         error("Error: zlib deflate stream was prematurely freed.")
     end
@@ -287,26 +295,25 @@ encode(::Type{Zlib}, input::Vector{UInt8}) = encode(Zlib, input, 9)
 function decode(::Type{Zlib}, input::Vector{UInt8})
     strm = z_stream()
     ret = ccall((:inflateInit_, libz),
-                Int32, (Ptr{z_stream}, Ptr{UInt8}, Int32),
-                &strm, zlib_version(), sizeof(z_stream))
+                Int32, (Ref{z_stream}, Ptr{UInt8}, Int32),
+                strm, zlib_version(), sizeof(z_stream))
 
     if ret != Z_OK
         error("Error initializing zlib inflate stream.")
     end
 
-    strm.next_in = input
+    strm.next_in = pointer(input)
     strm.avail_in = length(input)
     strm.total_in = length(input)
     output = Vector{UInt8}(0)
     outbuf = Vector{UInt8}(1024)
-    ret = Z_OK
 
-    while ret != Z_STREAM_END
-        strm.next_out = outbuf
+    @gc_preserve input outbuf while ret != Z_STREAM_END
+        strm.next_out = pointer(outbuf)
         strm.avail_out = length(outbuf)
         ret = ccall((:inflate, libz),
-                    Int32, (Ptr{z_stream}, Int32),
-                    &strm, Z_NO_FLUSH)
+                    Int32, (Ref{z_stream}, Int32),
+                    strm, Z_NO_FLUSH)
         if ret == Z_DATA_ERROR
             error("Error: input is not zlib compressed data.")
         elseif ret != Z_OK && ret != Z_STREAM_END
@@ -318,7 +325,7 @@ function decode(::Type{Zlib}, input::Vector{UInt8})
         end
     end
 
-    ret = ccall((:inflateEnd, libz), Int32, (Ptr{z_stream},), &strm)
+    ret = ccall((:inflateEnd, libz), Int32, (Ref{z_stream},), strm)
     if ret == Z_STREAM_ERROR
         error("Error: zlib inflate stream was prematurely freed.")
     end
@@ -339,7 +346,7 @@ function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     ndig = ndigits(i)
     ndig += isodd(ndig)
     v = digits(i, 10, ndig)
-    nbytes = @compat trunc(Integer, ndig/2)
+    nbytes = trunc(Integer, ndig/2)
     out = Vector{UInt8}(nbytes)
     dj = 1-2*bigendian
     for i = 1:nbytes
@@ -353,11 +360,11 @@ function decode(::Type{BCD}, v::Vector{UInt8}, bigendian::Bool = false)
     ret = 0
     if bigendian
         for i = 1:length(v)
-            ret = 100*ret + 10 * (@compat Int(v[i]>>>4)) + (@compat Int(v[i]&0x0f))
+            ret = 100*ret + 10 * Int(v[i]>>>4) + Int(v[i]&0x0f)
         end
     else
         for i = length(v):-1:1
-            ret = 100*ret + (@compat Int(v[i]>>>4)) + 10 * (@compat Int(v[i]&0x0f))
+            ret = 100*ret + Int(v[i]>>>4) + 10 * Int(v[i]&0x0f)
         end
     end
     return ret
