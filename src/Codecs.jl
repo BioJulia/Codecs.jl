@@ -2,21 +2,18 @@ __precompile__()
 
 module Codecs
 
-using Compat
-
-
 export encode, decode, Base64, Zlib, BCD
 
-@compat abstract type Codec end
+abstract type Codec end
 
 
-function encode{T <: Codec}(codec::Type{T}, s::AbstractString)
-    encode(codec, Vector{UInt8}(s))
+function encode(codec::Type{T}, s::AbstractString) where {T <: Codec}
+    encode(codec, convert(Vector{UInt8}, codeunits(String(s))))
 end
 
 
-function decode{T <: Codec}(codec::Type{T}, s::AbstractString)
-    decode(codec, Vector{UInt8}(s))
+function decode(codec::Type{T}, s::AbstractString) where {T <: Codec}
+    decode(codec, convert(Vector{UInt8}, codeunits(String(s))))
 end
 
 @static if isdefined(Base, Symbol("@gc_preserve"))
@@ -31,7 +28,7 @@ end
 
 # RFC3548/RFC4648 base64 codec
 
-@compat abstract type Base64 <: Codec end
+abstract type Base64 <: Codec end
 
 const b64enc_tbl = UInt8[
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
@@ -62,11 +59,11 @@ end
 function encode(::Type{Base64}, input::Vector{UInt8})
     n = length(input)
     if n == 0
-        return Vector{UInt8}(0)
+        return Vector{UInt8}(undef, 0)
     end
 
     m = Int(4 * ceil(n / 3))
-    output = Vector{UInt8}(m)
+    output = Vector{UInt8}(undef, m)
 
     k = 1
     for ii = 1:3:length(input)-2
@@ -98,7 +95,7 @@ end
 function decode(::Type{Base64}, input::Vector{UInt8})
     n = length(input)
     if n == 0
-        return Vector{UInt8}(0)
+        return Vector{UInt8}(undef, 0)
     end
 
     if n % 4 != 0
@@ -112,7 +109,7 @@ function decode(::Type{Base64}, input::Vector{UInt8})
     if input[end - 1] == base64_pad
         m -= 1
     end
-    output = Vector{UInt8}(m)
+    output = Vector{UInt8}(undef, m)
 
     k = 1
     @inbounds for ii = 1:4:length(input)-4
@@ -165,7 +162,7 @@ end
 
 # Zlib/Gzip
 
-@compat abstract type Zlib <: Codec end
+abstract type Zlib <: Codec end
 
 const Z_NO_FLUSH      = 0
 const Z_PARTIAL_FLUSH = 1
@@ -186,14 +183,14 @@ const Z_BUF_ERROR     = -5
 const Z_VERSION_ERROR = -6
 
 
-if Compat.Sys.isunix()
+if Sys.isunix()
     const libz = "libz"
-elseif Compat.Sys.iswindows()
+elseif Sys.iswindows()
     const libz = "zlib1"
 end
 
 # The zlib z_stream structure.
-type z_stream
+mutable struct z_stream
     next_in::Ptr{UInt8}
     avail_in::Cuint
     total_in::Culong
@@ -203,11 +200,11 @@ type z_stream
     total_out::Culong
 
     msg::Ptr{UInt8}
-    state::Ptr{Void}
+    state::Ptr{Nothing}
 
-    zalloc::Ptr{Void}
-    zfree::Ptr{Void}
-    opaque::Ptr{Void}
+    zalloc::Ptr{Nothing}
+    zfree::Ptr{Nothing}
+    opaque::Ptr{Nothing}
 
     data_type::Cint
     adler::Culong
@@ -256,8 +253,8 @@ function encode(::Type{Zlib}, input::Vector{UInt8}, level::Integer)
     strm.next_in = pointer(input)
     strm.avail_in = length(input)
     strm.total_in = length(input)
-    output = Vector{UInt8}(0)
-    outbuf = Vector{UInt8}(1024)
+    output = Vector{UInt8}(undef, 0)
+    outbuf = Vector{UInt8}(undef, 1024)
 
     @gc_preserve input outbuf while ret != Z_STREAM_END
         strm.avail_out = length(outbuf)
@@ -285,7 +282,7 @@ end
 
 
 function encode(::Type{Zlib}, input::AbstractString, level::Integer)
-    encode(Zlib, convert(Vector{UInt8}, input), level)
+    encode(Zlib, convert(Vector{UInt8}, codeunits(String(input))), level)
 end
 
 
@@ -305,8 +302,8 @@ function decode(::Type{Zlib}, input::Vector{UInt8})
     strm.next_in = pointer(input)
     strm.avail_in = length(input)
     strm.total_in = length(input)
-    output = Vector{UInt8}(0)
-    outbuf = Vector{UInt8}(1024)
+    output = Vector{UInt8}(undef, 0)
+    outbuf = Vector{UInt8}(undef, 1024)
 
     @gc_preserve input outbuf while ret != Z_STREAM_END
         strm.next_out = pointer(outbuf)
@@ -337,7 +334,7 @@ end
 # Packed binary-coded decimal (BCD) integers
 # Two decimal digits per byte, each represented with 4 bits
 
-@compat abstract type BCD <: Codec end
+abstract type BCD <: Codec end
 
 function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     if i < 0
@@ -345,9 +342,9 @@ function encode(::Type{BCD}, i::Integer, bigendian::Bool = false)
     end
     ndig = ndigits(i)
     ndig += isodd(ndig)
-    v = digits(i, 10, ndig)
+    v = digits(i; base=10, pad=ndig)
     nbytes = trunc(Integer, ndig/2)
-    out = Vector{UInt8}(nbytes)
+    out = Vector{UInt8}(undef, nbytes)
     dj = 1-2*bigendian
     for i = 1:nbytes
         j = bigendian*length(v) + dj*2*(i-1) + 1-bigendian
