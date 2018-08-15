@@ -7,6 +7,7 @@ notifications:
 julia:
   - 0.7
   - 1.0
+  - nightly
 before_install:
   - if [[ -a .git/shallow ]]; then git fetch --unshallow; fi
 after_success:
